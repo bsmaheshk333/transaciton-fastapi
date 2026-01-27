@@ -20,6 +20,7 @@ urlpatterns = [
 
     # transaction service APIs
     path("api/items/date-range", views.GetWorkItemByDateRange.as_view(), name="get-range"),
+    path("api/get_workitem/id/<str:workitem_id>", views.GetWorkItemByID.as_view())
 
 ]
 

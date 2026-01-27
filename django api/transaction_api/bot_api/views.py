@@ -1,8 +1,6 @@
 # library import
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
-
 # local app import
 from .models import WorkItemModel
 from .serializers import WorkItemSerializer
@@ -11,6 +9,9 @@ from rest_framework import status
 from django.contrib.auth import authenticate
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.shortcuts import get_object_or_404
+from django.core.cache import cache
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 
 class LoginApiView(APIView):
@@ -47,7 +48,6 @@ class RefreshTokenAPIView(APIView):
     """
     this is responsible for return of the access token based on the existing refresh token, if empty login may require again
     """
-
     # refresh token not require any authentication if you have a valid token, so allow anonymous request to get the access token
     permission_classes = [AllowAny]
     def post(self, request):
@@ -114,7 +114,7 @@ class CreateSingleWorkItem(APIView):
         # inject the pid from provided URL,
         payload = request.data.copy()
         payload['process_id'] = pid_value
-        # validate the payload on the schema level, whether the payload contains all the required fields
+        # validate the payload on the services level, whether the payload contains all the required fields
         # and each fields dtype and max length
         serializer = WorkItemSerializer(data=payload)  # many=False by default
 
@@ -236,3 +236,60 @@ class GetWorkItemByDateRange(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+class GetWorkItemByID(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, workitem_id):
+        print(f"{workitem_id= }")
+
+        # ===== step -1 first try to get from redis =====
+        print(f"Looking for data in cache first..")
+        cache_key = f"workitem_id:{workitem_id}"
+
+        try:
+            cached_data = cache.get(cache_key)
+        except RedisConnectionError:
+            print("[Exception] Connection to redis to could not be established.")
+            cached_data = None
+
+        if cached_data:
+            print(f"Data fetched from cache, instead of db")
+            return Response(
+                data=cached_data,
+                status=status.HTTP_200_OK
+            )
+
+        # ===== Step 2 query the db get the work-item if not found in cache=====
+        try:
+            print("Fetching data from db...")
+            workitem = get_object_or_404(WorkItemModel,
+                                         workitem_id=workitem_id
+                                         )
+        except Exception as ex:
+            return Response(
+                {'detail': f"{str(ex)}"},
+                status=status.HTTP_200_OK
+            )
+
+        # ===== step 3 prepare response to clint =====
+        print("preparing response...")
+        serializer_response = WorkItemSerializer(workitem, many=False)  # many is False by default
+
+        # ===== step 4 save to cache =====
+        # if not in key save to cache temporarily
+        try:
+            print("saving to cache..")
+            cache.set(cache_key, serializer_response.data, timeout=300)
+            print("data save to cached for 5 mins.")
+        except RedisConnectionError as ex:
+            print(f"Redis connection couldnt be established due to  {ex}")
+            cached_data = None
+
+        return Response(
+            data=serializer_response.data,
+            status=status.HTTP_200_OK
+        )
+
+
