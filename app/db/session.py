@@ -2,7 +2,7 @@ from app.db.database import Darwin
 # from sqlalchemy.ext.asyncio import async_session
 from urllib.parse import quote_plus
 
-password = "Radhamohan@333"
+password = "Harekrishna@123$"
 password_encoded = quote_plus(password)
 print(f"{password_encoded= }")
 DB_URL = "postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"

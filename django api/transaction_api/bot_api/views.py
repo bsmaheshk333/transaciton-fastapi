@@ -1,9 +1,6 @@
-# library import
+# third part library import
 from rest_framework.views import APIView
 from rest_framework.response import Response
-# local app import
-from .models import WorkItemModel
-from .serializers import WorkItemSerializer
 from django.db import transaction
 from rest_framework import status
 from django.contrib.auth import authenticate
@@ -13,27 +10,40 @@ from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from redis.exceptions import ConnectionError as RedisConnectionError
 
+# local library imports
+import logging
+
+# local app imports
+from .models import WorkItemModel
+from .serializers import WorkItemSerializer
+from .throttels import LoginThrottler
+
+
+logger = logging.getLogger(__name__)
+
 
 class LoginApiView(APIView):
     permission_classes = [AllowAny]
+    # throttle_classes = [LoginThrottler] # only login will have throttle
     def post(self, request):
         """
         requires post method to create a token everytime for user
         :param request: request header
         :return: response with token
         """
+        logger.info("processing login view endpoint.")
         username = request.data.get("username")
         password = request.data.get("password")
-        print(f"Authenticating user {username}")
+        logger.info(f"Authenticating user {username}")
         user = authenticate(username=username, password=password)
         if not user:  # if invalid creds return invalid 401
-            print(f"{user = }")
             return Response(
                 {
                     'error': "invalid username or password"
                 },
                 status=status.HTTP_401_UNAUTHORIZED
             )
+        logger.info("creating access token using refresh token.")
         refresh_token = RefreshToken.for_user(user)
         return Response(
             {
@@ -48,17 +58,20 @@ class RefreshTokenAPIView(APIView):
     """
     this is responsible for return of the access token based on the existing refresh token, if empty login may require again
     """
-    # refresh token not require any authentication if you have a valid token, so allow anonymous request to get the access token
+    # refresh token not require any authentication if you have a valid token,
+    # so allow anonymous request to get the access token
     permission_classes = [AllowAny]
     def post(self, request):
+        logger.info("creating a refresh token..")
         refresh_token = request.data.get("refresh")
+        logger.info(f"received a payload from browser {refresh_token}, validating...")
         if not refresh_token:
             return Response(
                 data={'detail': "refresh token required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         else:
-            # return the access token based on the refresh token
+            logger.info("Refresh token validated. proceeding to create an access token.")
             refresh = RefreshToken(refresh_token)
             try:
                 return Response(
@@ -66,7 +79,8 @@ class RefreshTokenAPIView(APIView):
                         'access': str(refresh.access_token)
                     }
                 )
-            except Exception:
+            except Exception as ex:
+                logger.error(f"error occurred due to {ex} ")
                 return Response(
                     data={
                         'detail': "invalid refresh token"
@@ -170,7 +184,7 @@ class CreateBulkInsert(APIView):
         serializer.is_valid(raise_exception=True)
 
         with transaction.atomic():
-            instances = serializer.save() # saved to db
+            instances = serializer.save()  # saved to db
             # TODO kafka
 
         # respond back client with the

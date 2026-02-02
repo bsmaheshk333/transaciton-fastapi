@@ -28,8 +28,9 @@ SECRET_KEY = 'django-insecure-8agvt%#ebkgv22evn9!flk3o(629!$=*(sv*b1d44acew6h)vo
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+# 0.0.0.0 listen everywhere (works with api)
+# localhost connects here (browser, api)
+ALLOWED_HOSTS = ["0.0.0.0",  "localhost"]
 
 # Application definition
 
@@ -44,7 +45,6 @@ INSTALLED_APPS = [
     "rest_framework"
 ]
 
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -52,6 +52,21 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+
+    # limited is set to all the endpoints globally, no specific handler required.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+
+    # custom exception handler instead of django handles it and return 429 for too many request.
+    "EXCEPTION_HANDLER": "bot_api.utils.custom_exception_handler", # custom exception
+
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10/min",  # for all other endpoints
+        "user": "10/min",
+        # "login": "1/min",  # only for login
+    }
 }
 
 SIMPLE_JWT = {
@@ -68,6 +83,38 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     }
+}
+
+# logging mechanism
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+
+    "formatters": {
+        "standard": {
+            "format": "[{asctime}] {levelname} {name} : {message}",
+            "style": "{",
+        },
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs/app.log",
+            "maxBytes": 1024 * 1024 * 5,  # 5 MB
+            "backupCount": 5,
+            "formatter": "standard",
+        },
+    },
+
+    "root": {
+        "handlers": ["console", "file"],
+        "level": "INFO",
+    },
 }
 
 MIDDLEWARE = [
@@ -116,7 +163,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "darwin",
         "USER": "postgres",
-        "PASSWORD": "Radhamohan@333",
+        "PASSWORD": "Harekrishna@123$",
         "PORT": "5432",
         "HOST": "localhost"
 
